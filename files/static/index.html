@@ -1,0 +1,2380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#e8553d">
+<title>Gestion de stock</title>
+<style>
+  :root {
+    --corail: #e8553d;
+    --corail-fonce: #c8412a;
+    --violet: #6c5ce7;
+    --violet-fonce: #4b3bc4;
+    --turquoise: #1b998b;
+    --turquoise-fonce: #137a6f;
+    --jaune: #f4a261;
+    --texte: #2b2d42;
+    --gris: #6b6f7b;
+    --bordure: rgba(255, 255, 255, 0.7);
+    --alerte-fond: #fff1e8;
+    --alerte-texte: #b2481f;
+    --rayon: 20px;
+    --ombre: 0 12px 34px rgba(43, 45, 66, 0.12);
+    --degrade-principal: linear-gradient(120deg, #e8553d 0%, #f4a261 100%);
+    --degrade-marque: linear-gradient(120deg, #e8553d 0%, #c8412a 45%, #6c5ce7 100%);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--texte);
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 8% 12%, rgba(244, 162, 97, 0.35) 0, transparent 38%),
+      radial-gradient(circle at 92% 18%, rgba(27, 153, 139, 0.28) 0, transparent 40%),
+      radial-gradient(circle at 50% 100%, rgba(108, 92, 231, 0.25) 0, transparent 45%),
+      linear-gradient(180deg, #fdf7f3 0%, #eef7f6 100%);
+    background-attachment: fixed;
+  }
+
+  /* ---------- Fond illustré : devanture de boutique ---------- */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: var(--fond-image, none);
+    background-size: cover;
+    background-position: center bottom;
+    background-repeat: no-repeat;
+    opacity: 0.16;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* ---------- En-tête ---------- */
+  header {
+    background: var(--degrade-marque);
+    color: #fff;
+    padding: 14px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    box-shadow: 0 8px 24px rgba(200, 65, 42, 0.3);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .marque { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 1.2em; letter-spacing: 0.3px; }
+  .badge {
+    width: 44px; height: 44px; border-radius: 14px;
+    background: rgba(255, 255, 255, 0.2);
+    display: grid; place-items: center; font-size: 24px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  }
+  .en-tete-droite { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* Pastille « en direct » */
+  .live {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255, 255, 255, 0.18); padding: 7px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 700;
+  }
+  .live i {
+    width: 9px; height: 9px; border-radius: 50%; background: #5cffb0;
+    box-shadow: 0 0 0 0 rgba(92, 255, 176, 0.7);
+    animation: pulse 1.6s infinite;
+  }
+  .live.hors i { background: #ffb3a7; animation: none; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(92, 255, 176, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(92, 255, 176, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(92, 255, 176, 0); }
+  }
+
+  /* ---------- Structure : menu et contenu ---------- */
+  .corps { display: grid; grid-template-columns: 1fr; }
+
+  .menu {
+    display: flex;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(255, 255, 255, 0.96);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.08);
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+    z-index: 15;
+  }
+  .menu a {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    text-decoration: none; color: var(--gris);
+    font-size: 12px; font-weight: 700;
+    padding: 6px 4px; border-radius: 14px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .menu a .ic { font-size: 20px; }
+  .menu a.actif { color: var(--violet-fonce); background: #f1edff; }
+
+  main { padding: 22px 16px 110px; max-width: 1180px; width: 100%; margin: auto; }
+
+  @media (min-width: 900px) {
+    .corps { grid-template-columns: 230px 1fr; align-items: start; }
+    .menu {
+      position: sticky; top: 92px;
+      flex-direction: column; justify-content: flex-start;
+      background: transparent; box-shadow: none; padding: 0;
+      backdrop-filter: none; -webkit-backdrop-filter: none;
+      margin: 22px 0 0 18px; gap: 6px;
+    }
+    .menu a {
+      flex: none; flex-direction: row; justify-content: flex-start;
+      font-size: 15px; padding: 12px 16px; gap: 12px;
+      background: rgba(255, 255, 255, 0.6);
+    }
+    .menu a .ic { font-size: 18px; }
+    .menu a.actif { background: #fff; box-shadow: inset 4px 0 0 var(--violet); }
+    main { padding: 22px 22px 40px; }
+  }
+
+  .page { animation: entree 0.45s ease both; }
+
+  /* ---------- Accueil ---------- */
+  .accueil {
+    background: var(--degrade-marque);
+    color: #fff;
+    border-radius: 26px;
+    padding: 28px 30px;
+    margin-bottom: 22px;
+    box-shadow: 0 18px 40px rgba(108, 92, 231, 0.28);
+    position: relative;
+    overflow: hidden;
+  }
+  .accueil::after {
+    content: ""; position: absolute; right: -60px; top: -60px;
+    width: 220px; height: 220px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .accueil h1 { margin: 0 0 6px; font-size: clamp(1.5em, 3vw, 2.1em); font-weight: 800; }
+  .accueil p { margin: 0; opacity: 0.92; }
+  .accueil .date { text-transform: capitalize; font-size: 0.95em; opacity: 0.85; margin-top: 4px; }
+
+  /* ---------- Cartes ---------- */
+  .carte {
+    background: rgba(255, 255, 255, 0.8);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--bordure);
+    border-radius: var(--rayon);
+    padding: 22px;
+    box-shadow: var(--ombre);
+    margin-bottom: 20px;
+    animation: entree 0.5s ease both;
+  }
+  h2, h3, h4 { margin: 4px 0 12px; color: var(--texte); }
+  h3 { font-size: 1.2em; font-weight: 800; }
+  h4 { font-size: 1.05em; color: var(--turquoise-fonce); font-weight: 700; }
+
+  .grille-2 { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 760px) { .grille-2 { grid-template-columns: 1fr 1fr; } }
+
+  /* ---------- Indicateurs ---------- */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .stat {
+    position: relative; overflow: hidden;
+    background: #fff; border-radius: 18px; padding: 16px 18px;
+    box-shadow: 0 6px 18px rgba(43, 45, 66, 0.07);
+    animation: entree 0.55s ease both;
+    animation-delay: calc(var(--i, 0) * 90ms);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .stat:hover { transform: translateY(-3px); box-shadow: 0 14px 28px rgba(43, 45, 66, 0.12); }
+  .stat::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+    background: var(--couleur, var(--turquoise));
+  }
+  .stat .icone {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: grid; place-items: center; font-size: 20px;
+    background: color-mix(in srgb, var(--couleur, var(--turquoise)) 18%, white);
+    margin-bottom: 10px;
+  }
+  .stat .titre { font-size: 13px; color: var(--gris); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat b { display: block; font-size: 1.45em; margin-top: 4px; color: var(--texte); font-weight: 800; }
+
+  /* ---------- Objectif ---------- */
+  .barre {
+    height: 16px; border-radius: 999px; background: #ece8f7; overflow: hidden; margin: 6px 0 10px;
+  }
+  .barre > div {
+    height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, #1b998b, #f4a261, #e8553d);
+    transition: width 0.8s ease;
+  }
+
+  /* ---------- Disposition générale ---------- */
+  .grille { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 1000px) { .grille { grid-template-columns: 2fr 1fr; } }
+  .colonne { display: flex; flex-direction: column; gap: 12px; }
+  .ligne { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .ligne > * { flex: 1 1 140px; }
+  .ligne > button { flex: 0 0 auto; }
+  .entete-carte { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .liens { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+
+  /* ---------- Boutons ---------- */
+  button, .bouton {
+    padding: 12px 20px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--degrade-principal);
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+    box-shadow: 0 8px 18px rgba(232, 85, 61, 0.28);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  }
+  button:hover, .bouton:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(232, 85, 61, 0.35); filter: brightness(1.04); }
+  button:active, .bouton:active { transform: translateY(0) scale(0.99); }
+  button:focus-visible, .bouton:focus-visible, input:focus-visible { outline: 3px solid rgba(108, 92, 231, 0.45); outline-offset: 2px; }
+
+  button.secondaire, .bouton.secondaire {
+    background: #fff;
+    color: var(--violet-fonce);
+    box-shadow: inset 0 0 0 2px var(--violet), 0 6px 14px rgba(108, 92, 231, 0.12);
+  }
+  button.secondaire:hover, .bouton.secondaire:hover { background: #f5f3ff; }
+
+  button.turquoise { background: linear-gradient(120deg, #1b998b, #3cc9b5); box-shadow: 0 8px 18px rgba(27, 153, 139, 0.3); }
+  button.turquoise:hover { box-shadow: 0 12px 24px rgba(27, 153, 139, 0.38); }
+
+  button.danger { background: #fff; color: var(--corail-fonce); box-shadow: inset 0 0 0 2px var(--corail); }
+  button.danger:hover { background: #fff1ee; }
+
+  button.enTete { background: rgba(255, 255, 255, 0.18); color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
+  button.enTete:hover { background: rgba(255, 255, 255, 0.3); }
+
+  button.onglet {
+    background: #f4f1fb; color: var(--texte); box-shadow: none; padding: 10px 16px;
+  }
+  button.onglet.actif { background: var(--violet); color: #fff; box-shadow: 0 8px 18px rgba(108, 92, 231, 0.3); }
+
+  button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; filter: none; }
+
+  /* ---------- Champs ---------- */
+  input {
+    padding: 13px 14px;
+    border: 1.5px solid #ddd3ca;
+    border-radius: 14px;
+    font: inherit;
+    font-size: 16px;
+    width: 100%;
+    background: #fff;
+    color: var(--texte);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  input:focus { border-color: var(--violet); box-shadow: 0 0 0 4px rgba(108, 92, 231, 0.15); outline: none; }
+  input[type="file"] { padding: 10px; background: #faf7ff; font-size: 14px; }
+
+  label.gris { font-size: 13px; font-weight: 700; color: var(--gris); text-transform: uppercase; letter-spacing: 0.4px; }
+  .gris { color: var(--gris); font-size: 14px; }
+  .erreur { color: var(--corail-fonce); font-weight: 700; min-height: 1.2em; margin: 4px 0; }
+  .masque { display: none !important; }
+
+  /* ---------- Tableaux ---------- */
+  .conteneur-table { overflow-x: auto; border-radius: 16px; border: 1px solid #eee6ff; background: #fff; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: linear-gradient(90deg, #f3f0ff, #e9fbf8);
+    color: var(--texte);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 800;
+  }
+  th, td { padding: 13px 14px; border-bottom: 1px solid #f3eef8; text-align: left; white-space: nowrap; }
+  th.num, td.num { text-align: right; }
+  tbody tr { cursor: pointer; transition: background 0.15s ease; }
+  tbody tr:nth-child(even) { background: #fcfbff; }
+  tbody tr:hover { background: #f1f9f8; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr.vide { cursor: default; }
+  tr.alerte { background: var(--alerte-fond) !important; color: var(--alerte-texte); font-weight: 700; }
+  tr.selectionnee { background: linear-gradient(90deg, #e6fbf7, #f3f0ff) !important; box-shadow: inset 5px 0 0 var(--turquoise); }
+  tr.selectionnee td:first-child { font-weight: 800; }
+
+  .liste-simple { list-style: none; margin: 0; padding: 0; }
+  .liste-simple li {
+    display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 12px 4px; border-bottom: 1px dashed #e7e0f2;
+  }
+  .liste-simple li:last-child { border-bottom: 0; }
+
+  /* ---------- Résumé ventes ---------- */
+  .resume { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  .resume > div {
+    background: linear-gradient(135deg, #f3f0ff, #e9fbf8); border-radius: 16px; padding: 14px 16px;
+  }
+  .resume b { display: block; font-size: 1.4em; font-weight: 800; }
+
+  /* ---------- Graphiques ---------- */
+  .graph { display: flex; align-items: stretch; gap: 6px; height: 220px; padding-top: 8px; }
+  .graph .col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .graph .zone { flex: 1; display: flex; align-items: flex-end; }
+  .graph .bar {
+    width: 100%; min-height: 3px; border-radius: 10px 10px 4px 4px;
+    background: linear-gradient(180deg, #f4a261, #e8553d);
+    transition: height 0.7s ease;
+  }
+  .graph .bar.vide { background: #ece8f7; }
+  .graph .etiquette { font-size: 11px; color: var(--gris); text-align: center; margin-top: 6px; white-space: nowrap; overflow: hidden; }
+
+  /* ---------- Ruptures ---------- */
+  .carte-rupture {
+    display: grid; grid-template-columns: 1fr; gap: 12px; align-items: center;
+    background: #fff; border-radius: 16px; padding: 14px 16px; margin-bottom: 12px;
+    box-shadow: 0 4px 14px rgba(43, 45, 66, 0.06); border-left: 6px solid var(--corail);
+  }
+  .carte-rupture.faible { border-left-color: var(--jaune); }
+  @media (min-width: 700px) { .carte-rupture { grid-template-columns: 1fr 1fr; } }
+  .carte-rupture .infos span { display: block; }
+
+  /* ---------- Fiche produit ---------- */
+  .apercu {
+    width: 100%; max-height: 280px; object-fit: contain;
+    background: linear-gradient(135deg, #fbefe6, #ece8ff, #e3f5f2);
+    border-radius: 18px; padding: 8px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+  }
+  hr { border: 0; border-top: 1.5px dashed #e4dcf3; width: 100%; margin: 8px 0; }
+  #fiche-nom { font-size: 1.35em; font-weight: 800; margin-bottom: 4px; }
+
+  /* ---------- Aperçu : première impression ---------- */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    display: none;
+    background:
+      radial-gradient(40vmax 40vmax at 15% 20%, rgba(232, 85, 61, 0.42), transparent 70%),
+      radial-gradient(45vmax 45vmax at 85% 15%, rgba(27, 153, 139, 0.38), transparent 70%),
+      radial-gradient(50vmax 50vmax at 60% 92%, rgba(108, 92, 231, 0.36), transparent 70%),
+      linear-gradient(160deg, #fff7f1 0%, #eef9f7 60%, #f3efff 100%);
+    animation: nuages 18s ease-in-out infinite alternate;
+  }
+  body:has(#ecran-login:not(.masque))::after,
+  body:has(#ecran-setup:not(.masque))::after { display: block; }
+
+  @keyframes nuages {
+    from { transform: scale(1) translate(0, 0); }
+    to { transform: scale(1.06) translate(-2%, 1.5%); }
+  }
+
+  .ecran .logo {
+    animation: flotter 4s ease-in-out infinite;
+    box-shadow: 0 18px 40px rgba(200, 65, 42, 0.45), 0 0 0 10px rgba(255, 255, 255, 0.55);
+  }
+  @keyframes flotter {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+
+  .accroche {
+    font-size: 1.05em;
+    font-weight: 800;
+    margin: 4px 0 16px;
+    background: linear-gradient(90deg, #e8553d, #6c5ce7, #1b998b);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .atouts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0 0 22px; }
+  .atouts span {
+    background: #fff;
+    border: 1px solid #efe4da;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--texte);
+    box-shadow: 0 4px 10px rgba(43, 45, 66, 0.06);
+  }
+
+  .ecran button[type="submit"] { width: 100%; padding: 14px; font-size: 16px; }
+
+  /* Bannière d'accueil : dégradé mouvant */
+  .accueil {
+    background: linear-gradient(115deg, #e8553d, #c8412a, #6c5ce7, #1b998b, #e8553d);
+    background-size: 300% 300%;
+    animation: degrade 14s ease infinite;
+  }
+  @keyframes degrade {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* ---------- Connexion et premier lancement ---------- */
+  .ecran { max-width: 420px; margin: 56px auto; text-align: center; padding: 34px 30px; }
+  .ecran::before {
+    content: ""; display: block; height: 6px;
+    background: var(--degrade-marque); margin: -34px -30px 26px;
+    border-radius: 20px 20px 0 0;
+  }
+  .ecran h2 { font-size: 1.6em; font-weight: 800; }
+  .ecran form { text-align: left; }
+  .ecran .logo {
+    width: 84px; height: 84px; margin: 0 auto 14px; border-radius: 26px;
+    background: var(--degrade-marque); display: grid; place-items: center;
+    font-size: 40px; box-shadow: 0 14px 30px rgba(200, 65, 42, 0.35);
+  }
+
+  /* ---------- Notifications et confirmation ---------- */
+  #toasts {
+    position: fixed; right: 18px; bottom: 96px; z-index: 100;
+    display: flex; flex-direction: column; gap: 10px; max-width: min(380px, calc(100vw - 36px));
+  }
+  @media (min-width: 900px) { #toasts { bottom: 18px; } }
+  .toast {
+    background: #2b2d42; color: #fff; padding: 14px 18px; border-radius: 14px;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.22); font-weight: 600;
+    border-left: 6px solid var(--turquoise);
+    animation: entree 0.35s ease both;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .toast.erreur { border-left-color: var(--corail); }
+  .toast.attention { border-left-color: var(--jaune); }
+  .toast.sortie { opacity: 0; transform: translateX(30px); }
+
+  .voile {
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(25, 25, 45, 0.5);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    display: grid; place-items: center; padding: 16px;
+    animation: fondu 0.2s ease both;
+  }
+  .boite {
+    background: #fff; border-radius: 22px; padding: 26px; max-width: 420px; width: 100%;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.25);
+    animation: entree 0.3s ease both;
+  }
+  #modal-texte { white-space: pre-line; font-size: 16px; font-weight: 600; margin: 0 0 20px; }
+  .boite .ligne > * { flex: 1 1 120px; }
+
+  /* ---------- Animations ---------- */
+  @keyframes entree {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fondu { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ---------- Impression (liste des ruptures) ---------- */
+  @media print {
+    header, .menu, #toasts, button, .liens, .fond-impression { display: none !important; }
+    body { background: #fff; }
+    body::before { display: none; }
+    .carte { box-shadow: none; border: 0; }
+  }
+
+  /* ---------- Petits écrans ---------- */
+  @media (max-width: 600px) {
+    .carte { padding: 16px; }
+    .accueil { padding: 22px; border-radius: 20px; }
+    .marque { font-size: 1.05em; }
+    th, td { padding: 10px 9px; font-size: 15px; }
+    .resume b { font-size: 1.2em; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  /* =========================================================
+     THÈME PREMIUM : style épuré des grandes boutiques en ligne
+     Cette couche remplace les couleurs et les effets précédents.
+     ========================================================= */
+  :root {
+    --noir: #1d1d1f;
+    --gris-texte: #6e6e73;
+    --fond-page: #f5f5f7;
+    --blanc: #ffffff;
+    --bordure-fine: #e5e5ea;
+    --accent: #0071e3;
+    --succes: #1f8a4c;
+    --danger: #d70015;
+    --rayon: 18px;
+    --ombre: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--fond-page);
+    color: var(--noir);
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.011em;
+  }
+  body::before, body::after { display: none; }
+
+  /* ---------- En-tête ---------- */
+  header {
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--noir);
+    box-shadow: none;
+    border-bottom: 1px solid var(--bordure-fine);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    padding: 12px 24px;
+  }
+  .marque { font-weight: 700; font-size: 1.08em; letter-spacing: -0.02em; }
+  .badge {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--noir); color: #fff; font-size: 18px;
+    box-shadow: none;
+  }
+  .live { background: #f0f0f3; color: var(--noir); font-weight: 600; }
+  .live i { background: var(--succes); box-shadow: none; }
+  .live.hors i { background: var(--danger); }
+  button.enTete {
+    background: transparent; color: var(--noir); box-shadow: inset 0 0 0 1px var(--bordure-fine);
+  }
+  button.enTete:hover { background: #f0f0f3; box-shadow: inset 0 0 0 1px var(--bordure-fine); }
+
+  /* ---------- Menu ---------- */
+  .menu { background: rgba(255, 255, 255, 0.9); border-top: 1px solid var(--bordure-fine); box-shadow: none; }
+  .menu a { color: var(--gris-texte); font-weight: 600; background: transparent; border-radius: 12px; }
+  .menu a.actif { color: var(--noir); background: #f0f0f3; box-shadow: none; }
+  @media (min-width: 900px) {
+    .menu { background: transparent; border: 0; }
+    .menu a { background: transparent; }
+    .menu a:hover { background: #ebebf0; }
+    .menu a.actif { background: #ebebf0; box-shadow: none; }
+  }
+
+  /* ---------- Cartes ---------- */
+  main { padding-top: 28px; }
+  .carte {
+    background: var(--blanc);
+    border: 1px solid var(--bordure-fine);
+    border-radius: var(--rayon);
+    box-shadow: var(--ombre);
+    padding: 24px;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  h2, h3, h4 { color: var(--noir); letter-spacing: -0.02em; }
+  h3 { font-size: 1.15em; font-weight: 700; }
+  h4 { color: var(--noir); font-weight: 600; }
+
+  /* ---------- Bannière d'accueil : sobre et contrastée ---------- */
+  .accueil {
+    background: var(--noir);
+    color: #fff;
+    border-radius: 28px;
+    padding: 44px 40px;
+    box-shadow: none;
+    animation: none;
+  }
+  .accueil::after {
+    background: radial-gradient(circle, rgba(0, 113, 227, 0.45), transparent 70%);
+    width: 360px; height: 360px; right: -120px; top: -140px;
+  }
+  .accueil h1 { font-size: clamp(2em, 4vw, 3em); font-weight: 700; letter-spacing: -0.03em; }
+  .accueil p { color: rgba(255, 255, 255, 0.72); }
+  .accueil .date { color: rgba(255, 255, 255, 0.55); }
+
+  /* ---------- Indicateurs ---------- */
+  .stat {
+    background: var(--blanc);
+    border: 1px solid var(--bordure-fine);
+    border-radius: 16px;
+    box-shadow: none;
+    padding: 18px;
+  }
+  .stat:hover { transform: none; box-shadow: var(--ombre); }
+  .stat::before { display: none; }
+  .stat .icone { background: #f5f5f7; width: 36px; height: 36px; font-size: 18px; border-radius: 10px; }
+  .stat .titre { color: var(--gris-texte); font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .stat b { font-size: 1.55em; font-weight: 700; letter-spacing: -0.025em; }
+
+  /* ---------- Boutons ---------- */
+  button, .bouton {
+    background: var(--noir);
+    color: #fff;
+    border-radius: 999px;
+    padding: 11px 22px;
+    font-weight: 600;
+    font-size: 15px;
+    box-shadow: none;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+  button:hover, .bouton:hover { background: #3a3a3c; transform: none; box-shadow: none; filter: none; }
+  button:active, .bouton:active { transform: scale(0.98); }
+  button.secondaire, .bouton.secondaire {
+    background: var(--blanc); color: var(--noir); box-shadow: inset 0 0 0 1px #d2d2d7;
+  }
+  button.secondaire:hover, .bouton.secondaire:hover { background: #f5f5f7; box-shadow: inset 0 0 0 1px #c7c7cc; }
+  button.turquoise { background: var(--noir); box-shadow: none; }
+  button.turquoise:hover { background: #3a3a3c; }
+  button.danger { background: var(--blanc); color: var(--danger); box-shadow: inset 0 0 0 1px #f5c2c7; }
+  button.danger:hover { background: #fff5f5; }
+  button.onglet { background: #f0f0f3; color: var(--noir); box-shadow: none; padding: 9px 16px; }
+  button.onglet:hover { background: #e5e5ea; }
+  button.onglet.actif { background: var(--noir); color: #fff; box-shadow: none; }
+  button:disabled { opacity: 0.35; background: var(--noir); }
+
+  /* ---------- Champs ---------- */
+  input {
+    border: 1px solid #d2d2d7;
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: var(--blanc);
+    color: var(--noir);
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15); }
+  input[type="file"] { background: #fafafc; font-size: 14px; }
+  label.gris { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; color: var(--gris-texte); }
+  .gris { color: var(--gris-texte); }
+  .erreur { color: var(--danger); font-weight: 600; }
+
+  /* ---------- Tableaux ---------- */
+  .conteneur-table { border: 1px solid var(--bordure-fine); border-radius: 14px; background: var(--blanc); }
+  thead th {
+    background: var(--blanc);
+    color: var(--gris-texte);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--bordure-fine);
+  }
+  th, td { border-bottom: 1px solid #f0f0f3; padding: 13px 16px; }
+  tbody tr:nth-child(even) { background: transparent; }
+  tbody tr:hover { background: #fafafc; }
+  tr.alerte { background: #fff4f4 !important; color: #b3261e; font-weight: 600; }
+  tr.selectionnee { background: #eef5ff !important; box-shadow: inset 3px 0 0 var(--accent); }
+  tr.selectionnee td:first-child { font-weight: 700; }
+
+  .liste-simple li { border-bottom: 1px solid #f0f0f3; }
+
+  /* ---------- Résumé ventes et graphiques ---------- */
+  .resume > div { background: #f5f5f7; border-radius: 14px; }
+  .graph .bar { background: var(--noir); border-radius: 6px 6px 3px 3px; }
+  .graph .bar:hover { background: var(--accent); }
+  .graph .bar.vide { background: #e5e5ea; }
+  .graph .etiquette { color: var(--gris-texte); }
+
+  .barre { background: #ececf0; height: 10px; }
+  .barre > div { background: var(--accent); }
+
+  /* ---------- Ruptures et fiche produit ---------- */
+  .carte-rupture { border: 1px solid var(--bordure-fine); border-left: 4px solid var(--danger); box-shadow: none; border-radius: 14px; }
+  .carte-rupture.faible { border-left-color: #f5a524; }
+  .apercu { background: #f5f5f7; border-radius: 16px; box-shadow: none; }
+  hr { border-top: 1px solid #f0f0f3; }
+  #fiche-nom { font-size: 1.25em; font-weight: 700; letter-spacing: -0.02em; }
+
+  /* ---------- Connexion et premier lancement ---------- */
+  .ecran {
+    max-width: 400px;
+    border-radius: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03), 0 20px 50px rgba(0, 0, 0, 0.08);
+    padding: 44px 36px;
+  }
+  .ecran::before { display: none; }
+  .ecran h2 { font-size: 1.6em; font-weight: 700; letter-spacing: -0.03em; }
+  .ecran .logo {
+    width: 64px; height: 64px; border-radius: 18px;
+    background: var(--noir); font-size: 30px;
+    box-shadow: none; animation: none;
+  }
+  .accroche { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--gris-texte); font-weight: 500; }
+  .atouts span { background: #f5f5f7; border: 0; box-shadow: none; font-weight: 500; }
+  .ecran button[type="submit"] { padding: 14px; font-size: 16px; }
+
+  /* ---------- Notifications et fenêtres ---------- */
+  .toast {
+    background: var(--noir);
+    border-left: 0;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    font-weight: 500;
+  }
+  .toast.erreur { background: var(--danger); }
+  .toast.attention { background: #8a5a00; }
+  .voile { background: rgba(0, 0, 0, 0.32); }
+  .boite { border-radius: 22px; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.18); }
+
+  /* =========================================================
+     NAVIGATION PLEINE LARGEUR ET ANIMATIONS
+     ========================================================= */
+
+  /* Arrière-plan vivant très discret */
+  body::before {
+    display: block;
+    content: "";
+    position: fixed;
+    inset: -20%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(closest-side, rgba(0, 113, 227, 0.10), transparent),
+      radial-gradient(closest-side, rgba(255, 149, 0, 0.08), transparent),
+      radial-gradient(closest-side, rgba(52, 199, 89, 0.07), transparent);
+    background-size: 46vmax 46vmax, 40vmax 40vmax, 52vmax 52vmax;
+    background-position: 10% 15%, 88% 30%, 55% 92%;
+    background-repeat: no-repeat;
+    opacity: 1;
+    animation: derive 26s ease-in-out infinite alternate;
+  }
+  @keyframes derive {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    100% { transform: translate3d(-3%, 2%, 0) scale(1.05); }
+  }
+
+  @keyframes pageEntree {
+    from { opacity: 0; transform: translateY(12px); filter: blur(3px); }
+    to { opacity: 1; transform: none; filter: none; }
+  }
+  @keyframes montee {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    0% { transform: scale(0.92); }
+    60% { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+  @keyframes brille {
+    from { background-position: 0% 0; }
+    to { background-position: 200% 0; }
+  }
+
+  /* Transition de page et apparition échelonnée des blocs */
+  .page { animation: pageEntree 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .page > * { animation: montee 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .page > *:nth-child(2) { animation-delay: 0.07s; }
+  .page > *:nth-child(3) { animation-delay: 0.14s; }
+  .page > *:nth-child(4) { animation-delay: 0.21s; }
+  .page > *:nth-child(5) { animation-delay: 0.28s; }
+
+  .stat {
+    animation: montee 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--i, 0) * 80ms + 120ms);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  .stat:hover { transform: translateY(-3px); box-shadow: 0 14px 36px rgba(0, 0, 0, 0.08); }
+
+  .carte { transition: box-shadow 0.3s ease; }
+  .carte:hover { box-shadow: 0 14px 40px rgba(0, 0, 0, 0.07); }
+
+  /* Boutons vivants */
+  button, .bouton { transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease; }
+  button:hover, .bouton:hover { transform: translateY(-1px); }
+  button:active, .bouton:active { transform: scale(0.97); }
+
+  /* Barre de progression de l'objectif : remplissage fluide et reflet qui défile */
+  .barre > div {
+    transition: width 1.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+    background: linear-gradient(90deg, var(--accent), #5ac8fa, var(--accent));
+    background-size: 200% 100%;
+    animation: brille 2.4s linear infinite;
+  }
+
+  /* Cartes de rupture */
+  .carte-rupture { transition: transform 0.25s ease, box-shadow 0.25s ease; }
+  .carte-rupture:hover { transform: translateX(4px); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.07); }
+
+  /* Ligne de tableau au survol plus expressive */
+  tbody tr { transition: background 0.2s ease, transform 0.2s ease; }
+  tbody tr:hover { transform: translateX(2px); }
+
+  /* Navigation : bande pleine largeur sur ordinateur */
+  @media (min-width: 900px) {
+    .corps { grid-template-columns: 1fr; }
+    .menu {
+      position: sticky;
+      top: 66px;
+      z-index: 14;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+      flex-direction: row;
+      margin: 14px 22px 0;
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid var(--bordure-fine);
+      border-radius: 20px;
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.05);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+    }
+    .menu a {
+      flex: 1;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      padding: 14px 10px;
+      font-size: 14px;
+      border-radius: 14px;
+      transition: transform 0.25s ease, background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+    }
+    .menu a .ic { font-size: 22px; transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
+    .menu a:hover { transform: translateY(-2px); background: #f0f0f3; color: var(--noir); }
+    .menu a:hover .ic { transform: scale(1.18) rotate(-6deg); }
+    .menu a.actif {
+      background: var(--noir);
+      color: #fff;
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+      animation: pop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    .menu a.actif:hover { background: #3a3a3c; }
+    .menu a.actif .ic { animation: pop 0.6s ease 0.1s both; }
+    main { padding: 26px 22px 48px; }
+  }
+
+  /* Navigation mobile : barre du bas, animée */
+  @media (max-width: 899px) {
+    .menu a { transition: transform 0.25s ease, color 0.25s ease, background 0.25s ease; }
+    .menu a.actif { animation: pop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1); }
+    .menu a.actif .ic { animation: pop 0.6s ease 0.1s both; }
+    .menu a:active { transform: scale(0.94); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body::before, .barre > div, .page, .page > *, .stat, .menu a.actif { animation: none !important; }
+  }
+
+  /* =========================================================
+     SIGNATURE : aurore, verre et mouvement (design final)
+     ========================================================= */
+  :root {
+    --aurore: linear-gradient(120deg, #0a84ff 0%, #7c5cff 48%, #ff5fa2 100%);
+    --encre: #0b0b12;
+    --accent: #7c5cff;
+    --rayon: 24px;
+    --ombre: 0 1px 2px rgba(11, 11, 18, 0.04), 0 14px 40px rgba(11, 11, 18, 0.07);
+  }
+  body { background: #f4f5fa; font-variant-numeric: tabular-nums; }
+  body::before {
+    background:
+      radial-gradient(closest-side, rgba(10, 132, 255, 0.16), transparent),
+      radial-gradient(closest-side, rgba(255, 95, 162, 0.12), transparent),
+      radial-gradient(closest-side, rgba(124, 92, 255, 0.14), transparent);
+    background-size: 50vmax 50vmax, 42vmax 42vmax, 56vmax 56vmax;
+    background-position: 8% 12%, 92% 26%, 58% 94%;
+    background-repeat: no-repeat;
+  }
+  .badge { background: var(--aurore); box-shadow: 0 8px 20px rgba(124, 92, 255, 0.4); }
+  .carte { border-radius: var(--rayon); border-color: rgba(11, 11, 18, 0.06); }
+
+  /* Navigation : rubrique active en aurore */
+  @media (min-width: 900px) {
+    .menu a.actif, .menu a.actif:hover { background: var(--aurore); box-shadow: 0 12px 28px rgba(124, 92, 255, 0.38); }
+    .menu a.actif:hover { filter: brightness(1.06); }
+  }
+  @media (max-width: 899px) {
+    .menu a.actif { background: #f1edff; color: var(--accent); }
+  }
+
+  /* Bannière d'accueil : aurore qui tourne derrière un voile sombre */
+  .accueil {
+    background: var(--encre);
+    border-radius: 32px;
+    padding: clamp(32px, 5vw, 56px);
+    isolation: isolate;
+    animation: none;
+  }
+  .accueil::before {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    z-index: -2;
+    background: conic-gradient(from 0deg, #0a84ff, #7c5cff, #ff5fa2, #ffb340, #0a84ff);
+    filter: blur(80px);
+    opacity: 0.55;
+    animation: tourne 22s linear infinite;
+  }
+  .accueil::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    border-radius: inherit;
+    z-index: -1;
+    background: radial-gradient(120% 90% at 0% 0%, rgba(11, 11, 18, 0.15), rgba(11, 11, 18, 0.78));
+  }
+  @keyframes tourne { to { transform: rotate(360deg); } }
+  .accueil h1 {
+    font-size: clamp(2.2em, 5vw, 3.6em);
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    font-weight: 800;
+    background: linear-gradient(120deg, #ffffff 30%, #c9d6ff 62%, #ffd1e8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .accueil p { color: rgba(255, 255, 255, 0.78); font-size: 1.05em; }
+  .accueil .date { color: rgba(255, 255, 255, 0.55); }
+  .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+  .hero-actions .bouton { background: #fff; color: var(--encre); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
+  .hero-actions .bouton:hover { background: #fff; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35); }
+  .hero-actions .bouton.secondaire {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .hero-actions .bouton.secondaire:hover { background: rgba(255, 255, 255, 0.22); }
+
+  /* Indicateurs : filet en aurore et halo qui suit le curseur */
+  .stat { border-radius: 20px; border-color: rgba(11, 11, 18, 0.06); }
+  .stat::before {
+    display: block;
+    left: 0; right: 0; top: 0; bottom: auto;
+    width: auto; height: 3px;
+    background: var(--aurore);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .stat:hover::before { transform: scaleX(1); }
+  .stat::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 0%), rgba(124, 92, 255, 0.14), transparent 70%);
+  }
+  .stat:hover::after { opacity: 1; }
+  .stat .icone { background: linear-gradient(135deg, rgba(10, 132, 255, 0.14), rgba(255, 95, 162, 0.14)); }
+
+  /* Boutons principaux : l'aurore apparaît au survol */
+  button:not(.secondaire):not(.danger):not(.onglet):not(.enTete):not(:disabled):hover,
+  .bouton:not(.secondaire):hover {
+    background: var(--aurore);
+    box-shadow: 0 12px 28px rgba(124, 92, 255, 0.35);
+  }
+  .hero-actions .bouton:hover { background: #fff; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35); }
+  button.onglet.actif { background: var(--aurore); box-shadow: 0 8px 20px rgba(124, 92, 255, 0.3); }
+
+  /* Progression, graphiques, sélection, champs */
+  .barre { height: 12px; background: #e9eaf3; }
+  .barre > div { background: var(--aurore); background-size: 200% 100%; }
+  .graph .bar {
+    background: linear-gradient(180deg, #ff5fa2 0%, #7c5cff 55%, #0a84ff 100%);
+    transform-origin: bottom;
+    animation: grandit 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--k, 0) * 45ms);
+  }
+  .graph .bar:hover { filter: brightness(1.12); }
+  .graph .bar.vide { background: #e5e6ef; animation: none; }
+  @keyframes grandit { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  tr.selectionnee { background: linear-gradient(90deg, rgba(124, 92, 255, 0.1), transparent) !important; box-shadow: inset 3px 0 0 var(--accent); }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.16); }
+  .toast { background: rgba(11, 11, 18, 0.88); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+
+  /* Connexion et premier lancement : verre sur fond sombre (navigateurs récents) */
+  @supports selector(:has(*)) {
+    body:has(#ecran-login:not(.masque)), body:has(#ecran-setup:not(.masque)) { background: var(--encre); }
+    body:has(#ecran-login:not(.masque))::before, body:has(#ecran-setup:not(.masque))::before {
+      background:
+        radial-gradient(closest-side, rgba(10, 132, 255, 0.55), transparent),
+        radial-gradient(closest-side, rgba(255, 95, 162, 0.45), transparent),
+        radial-gradient(closest-side, rgba(124, 92, 255, 0.5), transparent);
+      background-size: 60vmax 60vmax, 50vmax 50vmax, 66vmax 66vmax;
+      background-position: 10% 10%, 92% 30%, 55% 95%;
+      background-repeat: no-repeat;
+    }
+    .ecran {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      backdrop-filter: blur(24px) saturate(160%);
+      color: #fff;
+    }
+    .ecran h2 { color: #fff; }
+    .ecran .gris, .ecran .accroche { color: rgba(255, 255, 255, 0.72); }
+    .ecran .atouts span { background: rgba(255, 255, 255, 0.1); color: #fff; }
+    .ecran input { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.22); color: #fff; }
+    .ecran input::placeholder { color: rgba(255, 255, 255, 0.55); }
+    .ecran button[type="submit"] { background: var(--aurore); box-shadow: 0 12px 30px rgba(124, 92, 255, 0.45); }
+    .ecran .erreur { color: #ff9aa5; }
+    .ecran .logo { background: var(--aurore); box-shadow: 0 18px 50px rgba(124, 92, 255, 0.55); animation: flotter 4s ease-in-out infinite; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .accueil::before, .graph .bar, .ecran .logo { animation: none !important; }
+  }
+
+  /* Facture à l'écran et à l'impression */
+  #facture-texte { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 15px; white-space: pre-wrap; margin: 0 0 18px; }
+  @media print {
+    body.impression-facture > *:not(#facture-modal) { display: none !important; }
+    body.impression-facture #facture-modal { position: static; display: block; padding: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+    body.impression-facture .boite { box-shadow: none; max-width: none; padding: 0; }
+  }
+
+  /* Écrans hors application (connexion, inscription, récupération) */
+  body.hors-app { background: var(--encre); }
+  body.hors-app::before {
+    background:
+      radial-gradient(closest-side, rgba(10, 132, 255, 0.55), transparent),
+      radial-gradient(closest-side, rgba(255, 95, 162, 0.45), transparent),
+      radial-gradient(closest-side, rgba(124, 92, 255, 0.5), transparent);
+    background-size: 60vmax 60vmax, 50vmax 50vmax, 66vmax 66vmax;
+    background-position: 10% 10%, 92% 30%, 55% 95%;
+    background-repeat: no-repeat;
+  }
+  .liens-ecran { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+  .liens-ecran a { color: inherit; opacity: 0.8; }
+  .code-recup {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1.6em; font-weight: 700;
+    letter-spacing: 0.08em; padding: 16px; margin: 10px 0 18px; border-radius: 14px;
+    background: rgba(124, 92, 255, 0.14); user-select: all; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<!-- Premier lancement : création du mot de passe -->
+<section id="ecran-setup" class="ecran carte masque">
+  <div class="logo">🛍️</div>
+  <h2>Bienvenue</h2>
+  <p class="accroche">Commençons par ta boutique.</p>
+  <div class="atouts">
+    <span>🔒 Données chez toi</span>
+    <span>📴 Hors ligne</span>
+    <span>🧾 Factures & reçus</span>
+  </div>
+  <p class="gris">Crée ton compte propriétaire (mot de passe : 8 caractères minimum).</p>
+  <form id="form-setup" class="colonne">
+    <input id="setup-ancien" type="password" placeholder="Ancien mot de passe (mise à jour)" autocomplete="current-password" class="masque">
+    <input id="setup-nom" placeholder="Ton nom" maxlength="60" autocomplete="name" required>
+    <input id="setup-id" placeholder="E-mail ou numéro de téléphone" autocomplete="username" required>
+    <input id="setup-mdp" type="password" placeholder="Mot de passe" autocomplete="new-password" required>
+    <input id="setup-mdp2" type="password" placeholder="Retape le mot de passe" autocomplete="new-password" required>
+    <button type="submit">Créer le compte propriétaire</button>
+    <p id="erreur-setup" class="erreur"></p>
+  </form>
+</section>
+
+<!-- Connexion -->
+<section id="ecran-login" class="ecran carte masque">
+  <div class="logo">🛍️</div>
+  <h2>Bon retour !</h2>
+  <p class="accroche">Ta boutique, sous contrôle.</p>
+  <div class="atouts">
+    <span>🔒 Données chez toi</span>
+    <span>📴 Hors ligne</span>
+    <span>📈 Analyses en direct</span>
+  </div>
+  <form id="form-login" class="colonne">
+    <input id="login-id" placeholder="E-mail ou numéro de téléphone" autocomplete="username" required>
+    <input id="login-mdp" type="password" placeholder="Mot de passe" autocomplete="current-password" required>
+    <button type="submit">Se connecter</button>
+    <p id="erreur-login" class="erreur"></p>
+    <div class="liens-ecran">
+      <a href="#" id="lien-oubli">Mot de passe oublié ?</a>
+      <a href="#" id="lien-inscription">Créer un compte</a>
+    </div>
+  </form>
+</section>
+
+<!-- Inscription -->
+<section id="ecran-inscription" class="ecran carte masque">
+  <div class="logo">🛍️</div>
+  <h2>Créer un compte</h2>
+  <p class="gris">Le propriétaire devra valider ton compte avant ta première connexion.</p>
+  <form id="form-inscription" class="colonne">
+    <input id="insc-nom" placeholder="Ton nom" maxlength="60" autocomplete="name" required>
+    <input id="insc-id" placeholder="E-mail ou numéro de téléphone" autocomplete="username" required>
+    <input id="insc-mdp" type="password" placeholder="Mot de passe (8 caractères minimum)" autocomplete="new-password" required>
+    <button type="submit">Envoyer ma demande</button>
+    <p id="erreur-inscription" class="erreur"></p>
+    <div class="liens-ecran"><a href="#" id="insc-retour">← Retour à la connexion</a></div>
+  </form>
+</section>
+
+<!-- Mot de passe oublié -->
+<section id="ecran-oubli" class="ecran carte masque">
+  <div class="logo">🔑</div>
+  <h2>Mot de passe oublié</h2>
+  <p class="gris">Saisis ton identifiant, le code de récupération remis à ton inscription, et un nouveau mot de passe.</p>
+  <form id="form-oubli" class="colonne">
+    <input id="oubli-id" placeholder="E-mail ou numéro de téléphone" autocomplete="username" required>
+    <input id="oubli-code" placeholder="Code de récupération (XXXX-XXXX-XXXX)" autocomplete="off" required>
+    <input id="oubli-mdp" type="password" placeholder="Nouveau mot de passe (8 caractères minimum)" autocomplete="new-password" required>
+    <button type="submit">Réinitialiser</button>
+    <p id="erreur-oubli" class="erreur"></p>
+    <div class="liens-ecran"><a href="#" id="oubli-retour">← Retour à la connexion</a></div>
+  </form>
+  <p class="gris">Code perdu ? Demande au propriétaire de la boutique d'en générer un nouveau.</p>
+</section>
+
+<!-- Code de récupération -->
+<section id="ecran-code" class="ecran carte masque">
+  <div class="logo">🔐</div>
+  <h2>Ton code de récupération</h2>
+  <p class="gris" id="code-explication"></p>
+  <p class="code-recup" id="code-valeur"></p>
+  <button id="code-ok">J'ai noté mon code</button>
+</section>
+
+<!-- Application -->
+<div id="ecran-app" class="masque">
+  <header>
+    <div class="marque">
+      <div class="badge">🛍️</div>
+      <span id="nom-boutique">Gestion de stock</span>
+    </div>
+    <div class="en-tete-droite">
+      <span class="live" id="live"><i></i><span id="live-texte">En direct</span></span>
+      <button class="enTete" id="btn-sauvegarde" data-proprietaire>💾 Sauvegarder</button>
+      <button class="enTete" id="btn-deconnexion">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="corps">
+    <nav class="menu" aria-label="Navigation principale">
+      <a href="#accueil" data-page="accueil"><span class="ic">🏠</span><span>Accueil</span></a>
+      <a href="#produits" data-page="produits"><span class="ic">📦</span><span>Produits</span></a>
+      <a href="#ventes" data-page="ventes"><span class="ic">🧾</span><span>Ventes</span></a>
+      <a href="#revenus" data-page="revenus"><span class="ic">📈</span><span>Revenus</span></a>
+      <a href="#ruptures" data-page="ruptures"><span class="ic">⚠️</span><span>Ruptures</span></a>
+      <a href="#parametres" data-page="parametres"><span class="ic">⚙️</span><span>Paramètres</span></a>
+    </nav>
+
+    <main>
+      <!-- ===== ACCUEIL ===== -->
+      <section id="page-accueil" class="page">
+        <section class="accueil">
+          <h1 id="salut">Bonjour</h1>
+          <p>Voici l'activité de ta boutique, mise à jour en direct.</p>
+          <p class="date" id="date-jour"></p>
+          <div class="hero-actions">
+            <a class="bouton" href="#produits">+ Nouvelle vente</a>
+            <a class="bouton secondaire" href="#ruptures">Voir les ruptures</a>
+          </div>
+        </section>
+
+        <section class="carte">
+          <div class="stats" id="stats"></div>
+        </section>
+
+        <div class="grille-2">
+          <section class="carte" data-proprietaire>
+            <h3>🎯 Objectif du mois</h3>
+            <div class="barre"><div id="barre-objectif"></div></div>
+            <p class="gris" id="texte-objectif"></p>
+            <form id="form-objectif" class="ligne" style="margin-top:12px">
+              <input id="objectif-montant" type="number" min="0" placeholder="Objectif (FCFA)">
+              <button type="submit" class="turquoise">Enregistrer</button>
+            </form>
+            <p id="erreur-objectif" class="erreur"></p>
+          </section>
+
+          <section class="carte">
+            <h3>🧾 Dernières ventes</h3>
+            <ul class="liste-simple" id="liste-recentes"></ul>
+            <div class="liens">
+              <a class="bouton secondaire" href="#ventes">Voir toutes les ventes</a>
+              <a class="bouton secondaire" href="#revenus">Voir les revenus</a>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ===== PRODUITS ===== -->
+      <section id="page-produits" class="page masque">
+        <div class="grille">
+          <div>
+            <section class="carte">
+              <h3>📦 Produits</h3>
+              <form id="form-ajout" class="ligne">
+                <input id="ajout-nom" placeholder="Nom du produit" maxlength="80" required>
+                <input id="ajout-prix" type="number" min="0" placeholder="Prix (FCFA)" required>
+                <input id="ajout-qte" type="number" min="0" placeholder="Quantité" required>
+                <button type="submit" class="turquoise">+ Ajouter</button>
+              </form>
+              <p id="erreur-ajout" class="erreur"></p>
+              <input id="recherche" placeholder="🔍 Rechercher un produit…" style="margin:12px 0">
+              <div class="conteneur-table">
+                <table>
+                  <thead><tr><th>Produit</th><th class="num">Prix</th><th class="num">Stock</th></tr></thead>
+                  <tbody id="liste-produits"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <aside>
+            <section class="carte">
+              <p class="gris" id="fiche-vide">👈 Sélectionne un produit dans la liste pour voir ses détails.</p>
+              <div id="fiche-contenu" class="colonne masque">
+                <h3 id="fiche-nom"></h3>
+                <img id="fiche-photo" class="apercu masque" alt="Photo du produit">
+                <p class="gris" id="fiche-photo-vide">Pas encore de photo</p>
+                <label class="gris">Photo du produit</label>
+                <input type="file" id="fichier-produit" accept="image/*" capture="environment">
+                <button class="secondaire" id="btn-retirer-photo">Retirer la photo</button>
+
+                <hr>
+                <h4>🧾 Vendre</h4>
+                <label class="gris">Quantité</label>
+                <input id="vente-quantite" type="number" min="1" value="1">
+                <label class="gris">Photo du reçu (optionnel)</label>
+                <input type="file" id="fichier-recu" accept="image/*" capture="environment">
+                <button id="btn-vendre">Enregistrer la vente</button>
+
+                <hr>
+                <h4>✏️ Modifier</h4>
+                <label class="gris">Prix (FCFA)</label>
+                <input id="modif-prix" type="number" min="0">
+                <label class="gris">Stock</label>
+                <input id="modif-qte" type="number" min="0">
+                <button class="turquoise" id="btn-modifier">Enregistrer les modifications</button>
+                <button class="danger" id="btn-supprimer" data-proprietaire>Supprimer le produit</button>
+
+                <p id="erreur-fiche" class="erreur"></p>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ===== VENTES ===== -->
+      <section id="page-ventes" class="page masque">
+        <section class="carte">
+          <h3>🧾 Ventes</h3>
+          <div class="ligne" style="gap:8px">
+            <button class="onglet actif" data-periode="jour">Aujourd'hui</button>
+            <button class="onglet" data-periode="mois">Ce mois</button>
+            <button class="onglet" data-periode="tout">Tout</button>
+          </div>
+          <div class="resume">
+            <div><span class="gris">Nombre de ventes</span><b id="vt-nb">0</b></div>
+            <div><span class="gris">Total encaissé</span><b id="vt-total">0 FCFA</b></div>
+          </div>
+          <div class="liens" style="margin-top:4px">
+            <a id="vt-export" class="bouton secondaire" href="/api/export?periode=jour">📥 Exporter en CSV</a>
+          </div>
+          <div class="conteneur-table" style="margin-top:14px">
+            <table>
+              <thead><tr><th>N°</th><th>Date</th><th>Produit</th><th class="num">Qté</th><th class="num">Total</th></tr></thead>
+              <tbody id="liste-ventes"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ===== REVENUS ===== -->
+      <section id="page-revenus" class="page masque">
+        <div class="stats" id="rev-stats" style="margin-bottom:20px"></div>
+
+        <section class="carte">
+          <h3>🔮 Analyses</h3>
+          <p class="gris">Calculées à partir de tes ventes et de ton stock. Clique sur une ligne « ruptures » pour agir.</p>
+          <ul class="liste-simple" id="analyses"></ul>
+        </section>
+
+        <section class="carte">
+          <h3>📊 Les 14 derniers jours</h3>
+          <div class="graph" id="graph-jours"></div>
+        </section>
+
+        <section class="carte">
+          <h3>📅 Les 12 derniers mois</h3>
+          <div class="graph" id="graph-mois"></div>
+        </section>
+
+        <section class="carte">
+          <h3>🏆 Meilleurs produits</h3>
+          <div class="conteneur-table">
+            <table>
+              <thead><tr><th>Produit</th><th class="num">Quantité vendue</th><th class="num">Chiffre d'affaires</th></tr></thead>
+              <tbody id="rev-top"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ===== RUPTURES ===== -->
+      <section id="page-ruptures" class="page masque">
+        <section class="carte">
+          <div class="entete-carte">
+            <h3>⚠️ Ruptures et stock faible</h3>
+            <button class="secondaire" id="btn-imprimer">🖨️ Imprimer la liste</button>
+          </div>
+          <p class="gris">Renseigne la quantité reçue pour réapprovisionner un produit.</p>
+          <p id="erreur-ruptures" class="erreur"></p>
+          <div id="liste-ruptures"></div>
+        </section>
+      </section>
+      <!-- ===== PARAMÈTRES ===== -->
+      <section id="page-parametres" class="page masque">
+        <div class="grille-2">
+          <section class="carte" data-proprietaire>
+            <h3>🏪 Ma boutique</h3>
+            <p class="gris">Ce nom apparaît en haut de l'application et sur les factures.</p>
+            <form id="form-nom" class="colonne" style="margin-top:12px">
+              <label class="gris">Nom de la boutique</label>
+              <input id="param-nom" maxlength="60" required>
+              <button type="submit" class="turquoise">Enregistrer le nom</button>
+            </form>
+            <p id="erreur-nom" class="erreur"></p>
+          </section>
+
+          <section class="carte">
+            <h3>🔐 Mot de passe</h3>
+            <p class="gris">Après le changement, tu seras déconnecté et devras te reconnecter.</p>
+            <form id="form-mdp" class="colonne" style="margin-top:12px">
+              <label class="gris">Ancien mot de passe</label>
+              <input id="mdp-ancien" type="password" autocomplete="current-password" required>
+              <label class="gris">Nouveau mot de passe (8 caractères minimum)</label>
+              <input id="mdp-nouveau" type="password" autocomplete="new-password" required>
+              <label class="gris">Retape le nouveau mot de passe</label>
+              <input id="mdp-confirme" type="password" autocomplete="new-password" required>
+              <button type="submit">Changer le mot de passe</button>
+            </form>
+            <p id="erreur-mdp" class="erreur"></p>
+          </section>
+        </div>
+
+        <section class="carte" data-proprietaire>
+          <h3>👥 Équipe</h3>
+          <p class="gris">Les personnes qui créent un compte apparaissent ici : tu valides, refuses ou réinitialises leur accès.</p>
+          <label class="ligne" style="gap:8px;margin:10px 0"><input type="checkbox" id="inscriptions-ouvertes" style="width:auto;flex:0 0 auto"><span>Autoriser les nouvelles inscriptions</span></label>
+          <ul class="liste-simple" id="liste-equipe"></ul>
+          <p id="erreur-equipe" class="erreur"></p>
+        </section>
+
+        <section class="carte">
+          <h3>ℹ️ À propos</h3>
+          <ul class="liste-simple">
+            <li><span>Application</span><b>Gestion de stock</b></li>
+            <li><span>Connecté en tant que</span><b id="compte-courant">—</b></li>
+            <li><span>Version</span><b id="version-app">—</b></li>
+            <li><span>Stockage des données</span><b>Sur cet ordinateur uniquement</b></li>
+            <li><span>Sauvegardes conservées</span><b>30 dernières</b></li>
+          </ul>
+        </section>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- Facture -->
+<div id="facture-modal" class="voile masque" role="dialog" aria-modal="true" aria-label="Facture">
+  <div class="boite">
+    <pre id="facture-texte"></pre>
+    <div class="ligne">
+      <button class="secondaire" id="facture-fermer">Fermer</button>
+      <button id="facture-imprimer">🖨️ Imprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notifications et confirmation -->
+<div id="toasts"></div>
+<div id="modal" class="voile masque" role="dialog" aria-modal="true">
+  <div class="boite">
+    <p id="modal-texte"></p>
+    <div class="ligne">
+      <button class="secondaire" id="modal-annuler">Annuler</button>
+      <button class="danger" id="modal-ok">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SEUIL_DEFAUT = 5;
+  const INTERVALLE_LIVE_MS = 5000;
+  const PAGES = ['accueil', 'produits', 'ventes', 'revenus', 'ruptures', 'parametres'];
+
+  let produits = [];
+  let seuil = SEUIL_DEFAUT;
+  let objectif = 0;
+  let selection = null;            // nom du produit sélectionné
+  let dernierSelectionFiche = null;
+  let periodeVentes = 'jour';
+  let dernierSignatureRuptures = '';
+  let derniereSignature = '';
+  let nbAttente = null;   // demandes de compte en attente (propriétaire)
+
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Outils ----------
+  function formater(montant) {
+    return Number(montant).toLocaleString('fr-FR') + ' FCFA';
+  }
+
+  function echapper(texte) {
+    return String(texte).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  function cellule(valeur, classe) {
+    const td = document.createElement('td');
+    td.textContent = valeur;
+    if (classe) td.className = classe;
+    return td;
+  }
+
+  // Cellule « produit » d'une vente, avec le lien vers la photo du reçu si elle existe
+  function celluleProduit(v) {
+    const td = cellule(v.produit);
+    if (v.recu) {
+      const a = document.createElement('a');
+      a.href = '/' + v.recu;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = ' 🧾 reçu';
+      td.append(a);
+    }
+    return td;
+  }
+
+  function montrer(ecran) {
+    for (const id of ['ecran-setup', 'ecran-login', 'ecran-inscription', 'ecran-oubli', 'ecran-code', 'ecran-app']) {
+      $(id).classList.toggle('masque', id !== ecran);
+    }
+    document.body.classList.toggle('hors-app', ecran !== 'ecran-app');
+  }
+
+  function montrerErreur(zone, message) {
+    $(zone).textContent = message || '';
+  }
+
+  function pageCourante() {
+    const h = location.hash.slice(1);
+    return PAGES.includes(h) ? h : 'accueil';
+  }
+
+  // Notification à l'écran (type : ok, erreur, attention)
+  function notifier(message, type = 'ok') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + (type === 'ok' ? '' : type);
+    t.textContent = message;
+    $('toasts').append(t);
+    setTimeout(() => {
+      t.classList.add('sortie');
+      setTimeout(() => t.remove(), 320);
+    }, 3800);
+  }
+
+  // Fenêtre de confirmation à la place de confirm()
+  function confirmer(message) {
+    return new Promise((resolve) => {
+      $('modal-texte').textContent = message;
+      $('modal').classList.remove('masque');
+      const fermer = (valeur) => {
+        $('modal').classList.add('masque');
+        $('modal-ok').onclick = null;
+        $('modal-annuler').onclick = null;
+        resolve(valeur);
+      };
+      $('modal-ok').onclick = () => fermer(true);
+      $('modal-annuler').onclick = () => fermer(false);
+    });
+  }
+
+  // Exécute une action et affiche l'erreur éventuelle dans la zone indiquée
+  async function action(zone, fonction) {
+    montrerErreur(zone, '');
+    try {
+      await fonction();
+    } catch (e) {
+      montrerErreur(zone, e.message);
+      notifier(e.message, 'erreur');
+    }
+  }
+
+  // Redimensionne et convertit une image en JPEG (évite d'envoyer 5 Mo de photo de téléphone)
+  function lireImage(fichier, max = 1280) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(fichier);
+      const img = new Image();
+      img.onload = () => {
+        const ratio = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Image illisible.'));
+      };
+      img.src = url;
+    });
+  }
+
+  // Appel à l'API. Un 401 renvoie vers la connexion.
+  async function api(chemin, corps) {
+    const options = { method: corps ? 'POST' : 'GET', credentials: 'same-origin' };
+    if (corps) {
+      options.headers = { 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(corps);
+    }
+    const reponse = await fetch(chemin, options);
+    if (reponse.status === 401 && !/^\/api\/(login|setup|recuperation)/.test(chemin)) {
+      montrer('ecran-login');
+    }
+    const type = reponse.headers.get('Content-Type') || '';
+    const donnees = type.includes('application/json') ? await reponse.json() : null;
+    if (!reponse.ok) {
+      throw new Error((donnees && donnees.erreur) || `Erreur ${reponse.status}`);
+    }
+    return donnees;
+  }
+
+  function setLive(ok) {
+    const pastille = $('live');
+    pastille.classList.toggle('hors', !ok);
+    const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    $('live-texte').textContent = ok ? 'En direct · ' + heure : 'Hors ligne';
+  }
+
+  // ---------- Accueil ----------
+  function afficherAccueil() {
+    const heure = new Date().getHours();
+    const salut = heure < 12 ? 'Bonjour' : heure < 18 ? 'Bon après-midi' : 'Bonsoir';
+    $('salut').textContent = salut + ' 👋';
+    $('date-jour').textContent = new Date().toLocaleDateString('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+  }
+
+  function afficherStats(s) {
+    const bloc = $('stats');
+    const valeurs = [formater(s.ca_jour), formater(s.ca_semaine), formater(s.valeur), s.ruptures, s.alerte];
+    if (bloc.children.length === valeurs.length) { majStats(bloc, valeurs); return; }
+    bloc.replaceChildren();
+    const items = [
+      ['💰', 'Ventes du jour', formater(s.ca_jour), '#1b998b'],
+      ['📅', 'Ventes 7 jours', formater(s.ca_semaine), '#f4a261'],
+      ['📦', 'Valeur du stock', formater(s.valeur), '#6c5ce7'],
+      ['⛔', 'Ruptures', s.ruptures, '#e8553d'],
+      ['⚠️', 'Stock faible', s.alerte, '#f4a261'],
+    ];
+    items.forEach(([icone, titre, valeur, couleur], i) => {
+      const carte = document.createElement('div');
+      carte.className = 'stat';
+      carte.style.setProperty('--couleur', couleur);
+      carte.style.setProperty('--i', i);
+      const ic = document.createElement('div');
+      ic.className = 'icone';
+      ic.textContent = icone;
+      const t = document.createElement('div');
+      t.className = 'titre';
+      t.textContent = titre;
+      const v = document.createElement('b');
+      v.textContent = valeur;
+      carte.append(ic, t, v);
+      bloc.append(carte);
+    });
+    majStats(bloc, valeurs);
+  }
+
+  function afficherRecentes(ventesRecentes) {
+    const liste = $('liste-recentes');
+    liste.replaceChildren();
+    if (!ventesRecentes.length) {
+      const li = document.createElement('li');
+      li.className = 'gris';
+      li.textContent = 'Aucune vente pour le moment.';
+      liste.append(li);
+      return;
+    }
+    for (const v of ventesRecentes) {
+      const li = document.createElement('li');
+      const gauche = document.createElement('span');
+      gauche.textContent = `n°${v.id} · ${v.produit} × ${v.quantite}`;
+      const droite = document.createElement('b');
+      droite.textContent = formater(v.total);
+      li.append(gauche, droite);
+      liste.append(li);
+    }
+  }
+
+  function afficherObjectif(caMois) {
+    const pct = objectif > 0 ? Math.min(100, Math.round(caMois / objectif * 100)) : 0;
+    $('barre-objectif').style.width = pct + '%';
+    if (objectif > 0) {
+      const atteint = caMois >= objectif ? ' 🎉 Objectif atteint !' : '';
+      $('texte-objectif').textContent =
+        `${formater(caMois)} sur ${formater(objectif)} : ${pct} % atteint${atteint}`;
+    } else {
+      $('texte-objectif').textContent = 'Aucun objectif défini. Fixe un montant pour suivre ta progression.';
+    }
+    if (document.activeElement !== $('objectif-montant')) {
+      $('objectif-montant').value = objectif > 0 ? objectif : '';
+    }
+  }
+
+  // ---------- Produits ----------
+  function rafraichirListe() {
+    const filtre = $('recherche').value.trim().toLowerCase();
+    const corps = $('liste-produits');
+    corps.replaceChildren();
+    for (const p of produits) {
+      if (filtre && !p.nom.toLowerCase().includes(filtre)) continue;
+      const tr = document.createElement('tr');
+      if (p.qte < seuil) tr.classList.add('alerte');
+      if (p.nom === selection) tr.classList.add('selectionnee');
+      tr.addEventListener('click', () => {
+        selection = p.nom;
+        rafraichirListe();
+        rafraichirFiche(true);
+      });
+      tr.append(cellule(p.nom), cellule(formater(p.prix), 'num'), cellule(p.qte, 'num'));
+      corps.append(tr);
+    }
+  }
+
+  // reinit = true remet les champs à jour ; sinon on garde ce que l'utilisateur est en train de saisir
+  function rafraichirFiche(reinit = false) {
+    const p = produits.find((x) => x.nom === selection);
+    $('fiche-vide').classList.toggle('masque', !!p);
+    $('fiche-contenu').classList.toggle('masque', !p);
+    if (!p) {
+      dernierSelectionFiche = null;
+      return;
+    }
+
+    $('fiche-nom').textContent = p.nom;
+    const img = $('fiche-photo');
+    if (p.photo) {
+      if (img.getAttribute('src') !== '/' + p.photo) img.src = '/' + p.photo;
+      img.classList.remove('masque');
+      $('fiche-photo-vide').classList.add('masque');
+    } else {
+      img.removeAttribute('src');
+      img.classList.add('masque');
+      $('fiche-photo-vide').classList.remove('masque');
+    }
+    $('btn-retirer-photo').disabled = !p.photo;
+    $('btn-vendre').disabled = p.qte <= 0;
+    $('vente-quantite').max = Math.max(p.qte, 1);
+
+    if (reinit || selection !== dernierSelectionFiche) {
+      $('modif-prix').value = p.prix;
+      $('modif-qte').value = p.qte;
+      montrerErreur('erreur-fiche', '');
+      dernierSelectionFiche = selection;
+    }
+  }
+
+  // ---------- Ventes ----------
+  async function chargerVentes() {
+    const r = await api('/api/ventes?periode=' + periodeVentes);
+    $('vt-nb').textContent = r.nb;
+    $('vt-total').textContent = formater(r.total);
+    $('vt-export').classList.toggle('masque', periodeVentes === 'tout');
+    $('vt-export').href = '/api/export?periode=' + periodeVentes;
+
+    const corps = $('liste-ventes');
+    corps.replaceChildren();
+    if (!r.lignes.length) {
+      const tr = document.createElement('tr');
+      tr.className = 'vide';
+      const td = cellule('Aucune vente pour cette période.');
+      td.colSpan = 5;
+      td.className = 'gris';
+      tr.append(td);
+      corps.append(tr);
+      return;
+    }
+    for (const v of r.lignes) {
+      const tr = document.createElement('tr');
+      tr.append(
+        cellule('n°' + v.id),
+        cellule(v.date + ' ' + v.heure),
+        celluleProduit(v),
+        cellule(v.quantite, 'num'),
+        cellule(formater(v.total), 'num')
+      );
+      corps.append(tr);
+    }
+  }
+
+  // ---------- Revenus ----------
+  function remplirGraphique(conteneur, points) {
+    const signature = JSON.stringify(points);
+    if (conteneur.dataset.signature === signature) return;
+    conteneur.dataset.signature = signature;
+    conteneur.replaceChildren();
+    const max = Math.max(1, ...points.map((p) => p.total));
+    let rang = 0;
+    for (const p of points) {
+      const col = document.createElement('div');
+      col.className = 'col';
+      const zone = document.createElement('div');
+      zone.className = 'zone';
+      const barre = document.createElement('div');
+      barre.className = 'bar' + (p.total === 0 ? ' vide' : '');
+      barre.style.height = Math.max(2, Math.round(p.total / max * 100)) + '%';
+      barre.style.setProperty('--k', rang++);
+      barre.title = `${p.titre} : ${formater(p.total)}`;
+      zone.append(barre);
+      const etiquette = document.createElement('div');
+      etiquette.className = 'etiquette';
+      etiquette.textContent = p.etiquette;
+      col.append(zone, etiquette);
+      conteneur.append(col);
+    }
+  }
+
+  function afficherRevenus(rev) {
+    const stats = $('rev-stats');
+    const pct = objectif > 0 ? Math.round(rev.ca_mois / objectif * 100) + ' %' : 'Non défini';
+    const valeursRev = [formater(rev.ca_jour), formater(rev.ca_mois), pct];
+    const dejaLa = stats.children.length === valeursRev.length;
+    if (dejaLa) majStats(stats, valeursRev); else stats.replaceChildren();
+    const items = [
+      ['💰', "Aujourd'hui", formater(rev.ca_jour), '#1b998b'],
+      ['🗓️', 'Ce mois', formater(rev.ca_mois), '#6c5ce7'],
+      ['🎯', 'Objectif atteint', pct, '#f4a261'],
+    ];
+    items.forEach(([icone, titre, valeur, couleur], i) => {
+      const carte = document.createElement('div');
+      carte.className = 'stat';
+      carte.style.setProperty('--couleur', couleur);
+      carte.style.setProperty('--i', i);
+      const ic = document.createElement('div');
+      ic.className = 'icone';
+      ic.textContent = icone;
+      const t = document.createElement('div');
+      t.className = 'titre';
+      t.textContent = titre;
+      const v = document.createElement('b');
+      v.textContent = valeur;
+      carte.append(ic, t, v);
+      if (!dejaLa) stats.append(carte);
+    });
+    if (!dejaLa) majStats(stats, valeursRev);
+
+    remplirGraphique($('graph-jours'), rev.jours.map((j) => ({
+      total: j.total,
+      titre: j.date,
+      etiquette: j.date.slice(8, 10),
+    })));
+
+    remplirGraphique($('graph-mois'), rev.mois.map((m) => ({
+      total: m.total,
+      titre: m.mois,
+      etiquette: m.mois.slice(5, 7) + '/' + m.mois.slice(2, 4),
+    })));
+
+    const corps = $('rev-top');
+    corps.replaceChildren();
+    if (!rev.top.length) {
+      const tr = document.createElement('tr');
+      const td = cellule('Aucune vente enregistrée.');
+      td.colSpan = 3;
+      td.className = 'gris';
+      tr.append(td);
+      corps.append(tr);
+      return;
+    }
+    for (const p of rev.top) {
+      const tr = document.createElement('tr');
+      tr.append(cellule(p.produit), cellule(p.quantite, 'num'), cellule(formater(p.total), 'num'));
+      corps.append(tr);
+    }
+  }
+
+  function afficherAnalyses(a) {
+    const zone = $('analyses');
+    zone.replaceChildren();
+
+    const ligne = (libelle, valeur, lien) => {
+      const li = document.createElement('li');
+      const s = document.createElement('span');
+      s.textContent = libelle;
+      const b = document.createElement('b');
+      b.textContent = valeur;
+      li.append(s, b);
+      if (lien) {
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', () => { location.hash = lien; });
+      }
+      zone.append(li);
+    };
+
+    ligne(`Projection de fin de mois (${a.jours_ecoules} jour(s) sur ${a.jours_mois})`, formater(a.projection));
+    if (a.jour_fort) {
+      const jour = a.jour_fort.jour.charAt(0).toUpperCase() + a.jour_fort.jour.slice(1);
+      ligne('Jour le plus fort (90 derniers jours)', `${jour} · ${formater(a.jour_fort.total)}`);
+    }
+    if (a.heure_pointe) {
+      const heure = String(a.heure_pointe.heure).padStart(2, '0');
+      ligne('Heure de pointe', `${heure} h · ${a.heure_pointe.nb} vente(s)`);
+    }
+    if (a.ruptures_prevues.length) {
+      const texte = a.ruptures_prevues.map((p) => `${p.nom} (${p.jours} j)`).join(', ');
+      ligne('Ruptures prévues sous 7 jours', texte, '#ruptures');
+    } else {
+      ligne('Ruptures prévues sous 7 jours', 'Aucune');
+    }
+    ligne('Produits dormants (30 jours sans vente)', a.dormants.length ? a.dormants.join(', ') : 'Aucun');
+  }
+
+  async function chargerRevenus() {
+    const [rev, analyses] = await Promise.all([api('/api/revenus'), api('/api/analyse')]);
+    afficherRevenus(rev);
+    afficherAnalyses(analyses);
+    return rev;
+  }
+
+  // ---------- Ruptures ----------
+  function carteRupture(p, faible) {
+    const div = document.createElement('div');
+    div.className = 'carte-rupture' + (faible ? ' faible' : '');
+
+    const infos = document.createElement('div');
+    infos.className = 'infos';
+    const nom = document.createElement('b');
+    nom.textContent = p.nom;
+    const etat = document.createElement('span');
+    etat.className = 'gris';
+    etat.textContent = faible ? `Stock actuel : ${p.qte}` : 'Stock épuisé';
+    infos.append(nom, etat);
+
+    const actions = document.createElement('div');
+    actions.className = 'ligne';
+    const saisie = document.createElement('input');
+    saisie.type = 'number';
+    saisie.min = '1';
+    saisie.placeholder = 'Quantité reçue';
+    const bouton = document.createElement('button');
+    bouton.className = 'turquoise';
+    bouton.textContent = 'Réapprovisionner';
+    bouton.addEventListener('click', () => {
+      const recu = parseInt(saisie.value, 10);
+      action('erreur-ruptures', async () => {
+        if (!Number.isInteger(recu) || recu < 1) throw new Error('Indique une quantité reçue supérieure à 0.');
+        await api('/api/produit/modifier', { nom: p.nom, prix: p.prix, qte: p.qte + recu });
+        await charger(true);
+        notifier(`${p.nom} réapprovisionné (+${recu}) ✅`);
+      });
+    });
+    actions.append(saisie, bouton);
+
+    div.append(infos, actions);
+    return div;
+  }
+
+  function rafraichirRuptures() {
+    const ruptures = produits.filter((p) => p.qte === 0);
+    const faibles = produits.filter((p) => p.qte > 0 && p.qte < seuil);
+    // On ne reconstruit la liste que si elle a changé, pour ne pas effacer ce qui est saisi
+    const signature = JSON.stringify([ruptures, faibles].map((l) => l.map((p) => [p.nom, p.qte])));
+    if (signature === dernierSignatureRuptures) return;
+    dernierSignatureRuptures = signature;
+
+    const zone = $('liste-ruptures');
+    zone.replaceChildren();
+    if (!ruptures.length && !faibles.length) {
+      const msg = document.createElement('p');
+      msg.className = 'gris';
+      msg.textContent = 'Aucune rupture 🎉 Tous les produits sont bien approvisionnés.';
+      zone.append(msg);
+      return;
+    }
+    if (ruptures.length) {
+      const h = document.createElement('h4');
+      h.textContent = '⛔ En rupture';
+      zone.append(h);
+      for (const p of ruptures) zone.append(carteRupture(p, false));
+    }
+    if (faibles.length) {
+      const h = document.createElement('h4');
+      h.textContent = '⚠️ Stock faible';
+      zone.append(h);
+      for (const p of faibles) zone.append(carteRupture(p, true));
+    }
+  }
+
+  // ---------- Navigation ----------
+  function montrerPage() {
+    const page = pageCourante();
+    for (const p of PAGES) $('page-' + p).classList.toggle('masque', p !== page);
+    document.querySelectorAll('.menu a').forEach((a) => a.classList.toggle('actif', a.dataset.page === page));
+  }
+
+  async function afficherPage() {
+    const page = pageCourante();
+    montrerPage();
+    window.scrollTo(0, 0);
+    try {
+      if (page === 'ventes') await chargerVentes();
+      if (page === 'revenus') await chargerRevenus();
+      if (page === 'ruptures') rafraichirRuptures();
+    } catch (e) {
+      notifier(e.message, 'erreur');
+    }
+  }
+
+  window.addEventListener('hashchange', afficherPage);
+
+  // ---------- Chargement et temps réel ----------
+  async function charger(reinit = true) {
+    const d = await api('/api/donnees');
+    produits = d.produits;
+    seuil = d.seuil;
+    objectif = d.objectif || 0;
+    $('nom-boutique').textContent = d.boutique;
+    $('version-app').textContent = d.version;
+    if (document.activeElement !== $('param-nom')) $('param-nom').value = d.boutique;
+    document.title = d.boutique + ' · Gestion de stock';
+    appliquerRole(d);
+    afficherStats(d.stats);
+    // On ne reconstruit les listes que si les données (ou la sélection) ont changé
+    const signature = JSON.stringify([d.produits, d.ventes, selection]);
+    if (signature !== derniereSignature) {
+      derniereSignature = signature;
+      afficherRecentes(d.ventes);
+      rafraichirListe();
+    }
+    afficherObjectif(d.stats.ca_mois);
+    rafraichirFiche(reinit);
+
+    const page = pageCourante();
+    if (page === 'ventes') await chargerVentes();
+    if (page === 'revenus') await chargerRevenus();
+    if (page === 'ruptures') rafraichirRuptures();
+
+    montrerPage();
+    montrer('ecran-app');
+    setLive(true);
+  }
+
+  async function cycleLive() {
+    if (document.visibilityState !== 'visible') return;
+    if ($('ecran-app').classList.contains('masque')) return;
+    try {
+      await charger(false);
+    } catch (e) {
+      setLive(false);
+    }
+  }
+
+  // ---------- Écouteurs : démarrage et connexion ----------
+  $('form-setup').addEventListener('submit', (e) => {
+    e.preventDefault();
+    action('erreur-setup', async () => {
+      const a = $('setup-mdp').value;
+      const b = $('setup-mdp2').value;
+      if (a.length < 8) throw new Error('Le mot de passe doit contenir au moins 8 caractères.');
+      if (a !== b) throw new Error('Les deux mots de passe ne correspondent pas.');
+      const r = await api('/api/setup', {
+        nom: $('setup-nom').value, identifiant: $('setup-id').value, password: a, ancien: $('setup-ancien').value,
+      });
+      afficherCode(r.code, 'Garde ce code : il te permettra de retrouver ton accès si tu oublies ton mot de passe. Il ne sera plus affiché.',
+        async () => { await charger(); notifier('Bienvenue ! Ta boutique est prête. 🎉'); });
+    });
+  });
+
+  $('form-login').addEventListener('submit', (e) => {
+    e.preventDefault();
+    action('erreur-login', async () => {
+      await api('/api/login', { identifiant: $('login-id').value, password: $('login-mdp').value });
+      $('login-mdp').value = '';
+      await charger();
+    });
+  });
+
+  $('btn-deconnexion').addEventListener('click', () => {
+    action('erreur-fiche', async () => {
+      await api('/api/logout', {});
+      selection = null;
+      montrer('ecran-login');
+    });
+  });
+
+  $('btn-sauvegarde').addEventListener('click', () => {
+    action('erreur-fiche', async () => {
+      const r = await api('/api/sauvegarde', {});
+      notifier('Sauvegarde créée ✅ ' + r.dossier);
+    });
+  });
+
+  // ---------- Écouteurs : objectif ----------
+  $('form-objectif').addEventListener('submit', (e) => {
+    e.preventDefault();
+    action('erreur-objectif', async () => {
+      const montant = parseInt($('objectif-montant').value, 10);
+      if (!Number.isInteger(montant) || montant < 0) throw new Error('Montant invalide.');
+      await api('/api/objectif', { montant });
+      await charger(true);
+      notifier('Objectif enregistré 🎯');
+    });
+  });
+
+  // ---------- Écouteurs : produits ----------
+  $('recherche').addEventListener('input', rafraichirListe);
+
+  $('form-ajout').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const formulaire = e.target;
+    action('erreur-ajout', async () => {
+      await api('/api/produit/ajouter', {
+        nom: $('ajout-nom').value,
+        prix: Number($('ajout-prix').value),
+        qte: Number($('ajout-qte').value),
+      });
+      formulaire.reset();
+      await charger(true);
+      notifier('Produit ajouté ✅');
+    });
+  });
+
+  $('fichier-produit').addEventListener('change', (e) => {
+    const fichier = e.target.files[0];
+    const champ = e.target;
+    if (!fichier || !selection) return;
+    action('erreur-fiche', async () => {
+      const data = await lireImage(fichier);
+      await api('/api/produit/photo', { nom: selection, data });
+      champ.value = '';
+      await charger(true);
+      notifier('Photo enregistrée 📸');
+    });
+  });
+
+  $('btn-retirer-photo').addEventListener('click', () => {
+    if (!selection) return;
+    action('erreur-fiche', async () => {
+      if (!(await confirmer('Retirer la photo de ce produit ?\nLe fichier reste archivé.'))) return;
+      await api('/api/produit/photo/retirer', { nom: selection });
+      await charger(true);
+      notifier('Photo retirée');
+    });
+  });
+
+  $('btn-modifier').addEventListener('click', () => {
+    action('erreur-fiche', async () => {
+      await api('/api/produit/modifier', {
+        nom: selection,
+        prix: Number($('modif-prix').value),
+        qte: Number($('modif-qte').value),
+      });
+      await charger(true);
+      notifier('Modifications enregistrées ✅');
+    });
+  });
+
+  $('btn-supprimer').addEventListener('click', () => {
+    action('erreur-fiche', async () => {
+      if (!(await confirmer(`Supprimer ${selection} ?\nL'historique des ventes est conservé.`))) return;
+      await api('/api/produit/supprimer', { nom: selection });
+      selection = null;
+      await charger(true);
+      notifier('Produit supprimé');
+    });
+  });
+
+  // ---------- Écouteurs : ventes ----------
+  // La facture s'affiche dans la page (une fenêtre pop-up serait bloquée par le navigateur)
+  function ouvrirFacture(texte) {
+    $('facture-texte').textContent = texte;
+    $('facture-modal').classList.remove('masque');
+  }
+  $('facture-fermer').addEventListener('click', () => $('facture-modal').classList.add('masque'));
+  $('facture-imprimer').addEventListener('click', () => {
+    document.body.classList.add('impression-facture');
+    window.print();
+  });
+  window.addEventListener('afterprint', () => document.body.classList.remove('impression-facture'));
+
+  $('btn-vendre').addEventListener('click', () => {
+    action('erreur-fiche', async () => {
+      const quantite = parseInt($('vente-quantite').value, 10);
+      if (!Number.isInteger(quantite) || quantite < 1) throw new Error('Quantité invalide.');
+      const fichier = $('fichier-recu').files[0];
+      const recu = fichier ? await lireImage(fichier) : null;
+      const r = await api('/api/vente', { nom: selection, quantite, recu });
+      $('fichier-recu').value = '';
+      $('vente-quantite').value = 1;
+      ouvrirFacture(r.facture);
+      await charger(true);
+      notifier(`Vente n°${r.vid} enregistrée 🎉`);
+      if (r.alerte) notifier(`Stock faible : il ne reste que ${r.restant} ${r.nom}.`, 'attention');
+    });
+  });
+
+  // Onglets de la page Ventes
+  document.querySelectorAll('button.onglet').forEach((bouton) => {
+    bouton.addEventListener('click', () => {
+      periodeVentes = bouton.dataset.periode;
+      document.querySelectorAll('button.onglet').forEach((b) => b.classList.toggle('actif', b === bouton));
+      action('erreur-fiche', chargerVentes);
+    });
+  });
+
+  // ---------- Comptes : rôles, équipe, inscription, mot de passe oublié ----------
+  let suiteCode = null;
+
+  // Affiche un code de récupération une seule fois ; `suite` s'exécute quand la personne l'a noté
+  function afficherCode(code, explication, suite) {
+    $('code-valeur').textContent = code;
+    $('code-explication').textContent = explication;
+    suiteCode = suite;
+    montrer('ecran-code');
+  }
+
+  function appliquerRole(d) {
+    const proprietaire = d.moi.role === 'proprietaire';
+    document.querySelectorAll('[data-proprietaire]').forEach((el) => el.classList.toggle('masque', !proprietaire));
+    $('compte-courant').textContent = `${d.moi.nom} (${proprietaire ? 'propriétaire' : 'employé'})`;
+    if (proprietaire) afficherEquipe(d);
+  }
+
+  function boutonEquipe(texte, act, u, classe, confirmation) {
+    const b = document.createElement('button');
+    b.textContent = texte;
+    if (classe) b.className = classe;
+    b.style.padding = '8px 14px';
+    b.addEventListener('click', () => action('erreur-equipe', async () => {
+      if (confirmation && !(await confirmer(confirmation))) return;
+      const r = await api('/api/utilisateurs', { action: act, id: u.id });
+      await charger(true);
+      if (r.code) ouvrirFacture(`Code de récupération pour ${u.nom}\n\n${r.code}\n\nTransmets-le à cette personne.\nIl ne sera plus affiché.`);
+      else notifier('Équipe mise à jour ✅');
+    }));
+    return b;
+  }
+
+  function afficherEquipe(d) {
+    const attente = d.utilisateurs.filter((u) => u.statut === 'attente').length;
+    if (attente > (nbAttente || 0)) notifier('Nouvelle demande de compte à valider (rubrique Paramètres).', 'attention');
+    nbAttente = attente;
+    if (document.activeElement !== $('inscriptions-ouvertes')) $('inscriptions-ouvertes').checked = !!d.inscriptions;
+
+    const liste = $('liste-equipe');
+    const signature = JSON.stringify(d.utilisateurs);
+    if (liste.dataset.signature === signature) return;
+    liste.dataset.signature = signature;
+    liste.replaceChildren();
+    for (const u of d.utilisateurs) {
+      const li = document.createElement('li');
+      const info = document.createElement('span');
+      const etat = u.role === 'proprietaire' ? ' · propriétaire' : u.statut === 'attente' ? ' · en attente' : '';
+      info.textContent = `${u.nom} (${u.identifiant})${etat}`;
+      li.append(info);
+      if (u.role !== 'proprietaire') {
+        const actions = document.createElement('span');
+        actions.className = 'ligne';
+        if (u.statut === 'attente') {
+          actions.append(boutonEquipe('Valider', 'approuver', u),
+                         boutonEquipe('Refuser', 'refuser', u, 'danger', `Refuser la demande de ${u.nom} ?`));
+        } else {
+          actions.append(boutonEquipe('Nouveau code', 'reinitialiser', u, 'secondaire'),
+                         boutonEquipe('Supprimer', 'supprimer', u, 'danger', `Supprimer le compte de ${u.nom} ?`));
+        }
+        li.append(actions);
+      }
+      liste.append(li);
+    }
+  }
+
+  $('inscriptions-ouvertes').addEventListener('change', (e) => {
+    action('erreur-equipe', async () => {
+      await api('/api/utilisateurs', { action: 'inscriptions', valeur: e.target.checked });
+      notifier(e.target.checked ? 'Inscriptions ouvertes' : 'Inscriptions fermées');
+    });
+  });
+
+  $('code-ok').addEventListener('click', () => {
+    const suite = suiteCode;
+    suiteCode = null;
+    $('code-valeur').textContent = '';
+    if (suite) action('erreur-fiche', async () => suite());
+  });
+  $('lien-oubli').addEventListener('click', (e) => { e.preventDefault(); montrer('ecran-oubli'); });
+  $('lien-inscription').addEventListener('click', (e) => { e.preventDefault(); montrer('ecran-inscription'); });
+  $('insc-retour').addEventListener('click', (e) => { e.preventDefault(); montrer('ecran-login'); });
+  $('oubli-retour').addEventListener('click', (e) => { e.preventDefault(); montrer('ecran-login'); });
+
+  $('form-inscription').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const formulaire = e.target;
+    action('erreur-inscription', async () => {
+      const mdp = $('insc-mdp').value;
+      if (mdp.length < 8) throw new Error('Le mot de passe doit contenir au moins 8 caractères.');
+      const r = await api('/api/inscription', { nom: $('insc-nom').value, identifiant: $('insc-id').value, password: mdp });
+      formulaire.reset();
+      afficherCode(r.code, 'Garde ce code : il te permettra de retrouver ton accès si tu oublies ton mot de passe. Il ne sera plus affiché. Ton compte sera actif après validation par le propriétaire.',
+        () => montrer('ecran-login'));
+    });
+  });
+
+  $('form-oubli').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const formulaire = e.target;
+    action('erreur-oubli', async () => {
+      const nouveau = $('oubli-mdp').value;
+      if (nouveau.length < 8) throw new Error('Le mot de passe doit contenir au moins 8 caractères.');
+      const r = await api('/api/recuperation', { identifiant: $('oubli-id').value, code: $('oubli-code').value, nouveau });
+      formulaire.reset();
+      afficherCode(r.code, "Mot de passe changé. Voici ton nouveau code de récupération : l'ancien n'est plus valable.",
+        () => montrer('ecran-login'));
+    });
+  });
+
+  // ---------- Écouteurs : paramètres ----------
+  $('form-nom').addEventListener('submit', (e) => {
+    e.preventDefault();
+    action('erreur-nom', async () => {
+      const nom = $('param-nom').value.trim();
+      if (!nom) throw new Error('Le nom ne peut pas être vide.');
+      await api('/api/parametres', { nom });
+      await charger(true);
+      notifier('Nom de la boutique mis à jour ✅');
+    });
+  });
+
+  $('form-mdp').addEventListener('submit', (e) => {
+    e.preventDefault();
+    action('erreur-mdp', async () => {
+      const ancien = $('mdp-ancien').value;
+      const nouveau = $('mdp-nouveau').value;
+      if (nouveau.length < 8) throw new Error('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+      if (nouveau !== $('mdp-confirme').value) throw new Error('Les deux nouveaux mots de passe ne correspondent pas.');
+      if (!(await confirmer('Changer le mot de passe ?\nToutes les sessions seront fermées.'))) return;
+      await api('/api/mot-de-passe', { ancien, nouveau });
+      e.target.reset();
+      selection = null;
+      montrer('ecran-login');
+      notifier('Mot de passe changé. Reconnecte-toi avec le nouveau.');
+    });
+  });
+
+  // ---------- Écouteurs : objectif et ruptures ----------
+  $('btn-imprimer').addEventListener('click', () => window.print());
+
+  // ---------- Fond : devanture de boutique dessinée en SVG ----------
+  function construireDevanture() {
+    const couleurs = ['#1b998b', '#f4a261', '#6c5ce7', '#e8553d', '#3cc9b5'];
+    let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">';
+    for (let i = 0; i < 16; i++) {
+      s += `<rect x="${i * 100}" y="60" width="100" height="120" fill="${i % 2 ? '#ffffff' : '#e8553d'}"/>`;
+    }
+    for (let i = 0; i < 16; i++) {
+      s += `<circle cx="${i * 100 + 50}" cy="180" r="50" fill="${i % 2 ? '#ffffff' : '#e8553d'}"/>`;
+    }
+    s += '<rect x="120" y="260" width="1360" height="600" rx="18" fill="#ffffff" opacity="0.6"/>';
+    for (const y of [400, 560, 720]) {
+      s += `<rect x="150" y="${y}" width="1300" height="14" rx="6" fill="#6c5ce7"/>`;
+    }
+    for (const y of [400, 560, 720]) {
+      for (let i = 0; i < 14; i++) {
+        const x = 180 + i * 92;
+        const h = 60 + ((i * 37 + y) % 3) * 18;
+        const c = couleurs[(i + Math.floor(y / 100)) % couleurs.length];
+        s += `<rect x="${x}" y="${y - h}" width="58" height="${h}" rx="10" fill="${c}" opacity="0.85"/>`;
+      }
+    }
+    s += '<rect x="120" y="880" width="1360" height="120" rx="14" fill="#c8412a" opacity="0.8"/>';
+    s += '</svg>';
+    return s;
+  }
+
+  function appliquerFond() {
+    document.documentElement.style.setProperty(
+      '--fond-image', `url("data:image/svg+xml,${encodeURIComponent(construireDevanture())}")`
+    );
+  }
+
+  // ---------- Effets : chiffres animés et halo ----------
+  function animerNombre(el, cible, suffixe) {
+    const debut = Number(el.dataset.n || 0);
+    el.dataset.n = cible;
+    if (debut === cible) return;
+    const rendu = (n) => { el.textContent = Math.round(n).toLocaleString('fr-FR') + suffixe; };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { rendu(cible); return; }
+    const t0 = performance.now();
+    const duree = 900;
+    const pas = (t) => {
+      const p = Math.min(1, (t - t0) / duree);
+      rendu(debut + (cible - debut) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(pas);
+    };
+    requestAnimationFrame(pas);
+  }
+
+  // Met à jour les cartes d'indicateurs en place ; les valeurs numériques sont animées
+  function majStats(bloc, valeurs) {
+    [...bloc.children].forEach((carte, i) => {
+      const b = carte.querySelector('b');
+      const texte = String(valeurs[i]);
+      if (!/^[\d\s\u00a0\u202f]+(FCFA)?\s*$/.test(texte)) { b.textContent = texte; return; }
+      animerNombre(b, Number(texte.replace(/\D/g, '')), texte.includes('FCFA') ? ' FCFA' : '');
+    });
+  }
+
+  document.addEventListener('pointermove', (e) => {
+    const carte = e.target.closest && e.target.closest('.stat');
+    if (!carte) return;
+    const r = carte.getBoundingClientRect();
+    carte.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+    carte.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  });
+
+  // Actualisation immédiate au retour sur l'onglet
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') cycleLive();
+  });
+
+  // ---------- Démarrage ----------
+  async function demarrer() {
+    appliquerFond();
+    afficherAccueil();
+    setInterval(cycleLive, INTERVALLE_LIVE_MS);   // ne fait rien tant que l'application n'est pas affichée
+    if (!location.hash) location.hash = 'accueil';
+    const statut = await (await fetch('/api/statut')).json();
+    if (!statut.configure) {
+      $('setup-ancien').classList.toggle('masque', !statut.legacy);
+      $('setup-ancien').required = !!statut.legacy;
+      montrer('ecran-setup');
+      return;
+    }
+    try {
+      await charger();
+    } catch (e) {
+      montrer('ecran-login');
+    }
+  }
+
+  demarrer();
+</script>
+</body>
+</html>

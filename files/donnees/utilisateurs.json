@@ -1,0 +1,14 @@
+[
+ {
+  "id": "fa503f55dce7",
+  "identifiant": "96303951",
+  "nom": "Mr Good",
+  "role": "proprietaire",
+  "statut": "actif",
+  "cree": "2026-10-29 13:57",
+  "sel": "a67f09b7378930936dd11f41b8cef864",
+  "hash": "075d3afa20786fc2a9365e69a09bb862131c9e31e85bb7c9b4226ce49d193d36",
+  "sel_recup": "4ba2f93112ff4a31e33ca37e0866ab0b",
+  "hash_recup": "2a95698984556ef5d516d2f6098b3543ab35c6937fcf4dcaf015f5543fc9b697"
+ }
+]
